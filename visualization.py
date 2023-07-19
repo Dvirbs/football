@@ -1,8 +1,8 @@
+import numpy as np
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 import matplotlib.pyplot as plt
-import webbrowser
-import os
-import seaborn as sns
+import scipy.stats as stats
 
 
 def visualize_total_distance_distribution(new_df, summed_data):
@@ -18,7 +18,8 @@ def visualize_total_distance_distribution(new_df, summed_data):
     # Iterate over each day and add scatter plot trace with confidence intervals
     for _, row in new_df.iterrows():
         day = row.name
-        total_distance_values = summed_data.loc[day, 'Total Distance']
+        # Access the total distance value using the correct index value
+        total_distance_values = summed_data.loc[summed_data['Day'] == day, 'Total Distance']
 
         # Calculate the confidence intervals
         confidence_interval_low = row['Confidence Interval (Low)']
@@ -27,7 +28,7 @@ def visualize_total_distance_distribution(new_df, summed_data):
         # Add scatter plot trace
         fig.add_trace(go.Scatter(x=[day] * len(total_distance_values), y=total_distance_values,
                                  mode='markers', marker=dict(symbol='circle', size=12),
-                                 name=f"Day {day} - Total Distance"))
+                                 name=f"Day {day} - Total Distance per Player"))
 
         # Add confidence interval lines
         fig.add_shape(type='line', x0=day, y0=confidence_interval_low,
@@ -36,7 +37,7 @@ def visualize_total_distance_distribution(new_df, summed_data):
                       name=f"Day {day} - Confidence Interval")
 
         # Add sample mean marker
-        fig.add_trace(go.Scatter(x=[day], y=[row['Summed Total Distance']],
+        fig.add_trace(go.Scatter(x=[day], y=[row['Total Distance']],
                                  mode='markers', marker=dict(symbol='diamond', size=16, color='black'),
                                  name=f"Day {day} - Sample Mean"))
 
@@ -44,13 +45,68 @@ def visualize_total_distance_distribution(new_df, summed_data):
     fig.update_xaxes(title_text="Match Day", title_font=dict(size=24), tickfont=dict(size=18))
 
     # Set y-axis label
-    fig.update_yaxes(title_text="Total Distance Covered (units)", title_font=dict(size=24), tickfont=dict(size=18))
+    fig.update_yaxes(title_text="Total Distance Covered (meter)", title_font=dict(size=24), tickfont=dict(size=18))
 
     # Set title
-    fig.update_layout(title_text="Distance Covered in Practice for Each Match Day", title_font=dict(size=28))
+    fig.update_layout(title_text="Total Distance Covered in Practice for Each Match Day", title_font=dict(size=28))
 
     # Show legend
     fig.update_layout(showlegend=True, legend=dict(font=dict(size=18)))
+
+    # Show the plot
+    fig.show(renderer='browser')
+
+
+def visualize_distribution(data_df, summed_data, parameter_name):
+    """
+    Visualize the distribution of a specified parameter for each day with confidence intervals.
+
+    :param data_df: DataFrame with 'Day', 'Summed {parameter_name}', 'Confidence Interval (Low)', and 'Confidence Interval (High)'
+    :param summed_data: DataFrame with 'Day', 'Session', and the specified parameter
+    :param parameter_name: Name of the parameter to visualize
+    """
+    # Create a plotly figure
+    fig = go.Figure()
+
+    # Iterate over each day and add scatter plot trace with confidence intervals
+    for _, row in data_df.iterrows():
+        day = row.name
+        # Access the parameter values using the correct index value
+        parameter_values = summed_data.loc[summed_data['Day'] == day, parameter_name]
+
+        # Calculate the confidence intervals
+        confidence_interval_low = row['Confidence Interval (Low)']
+        confidence_interval_high = row['Confidence Interval (High)']
+
+        # Add scatter plot trace
+        fig.add_trace(go.Scatter(x=[day] * len(parameter_values), y=parameter_values,
+                                 mode='markers', marker=dict(symbol='circle', size=12),
+                                 name=f"Day {day} - {parameter_name} per Player"))
+
+        # Add confidence interval lines
+        fig.add_shape(type='line', x0=day, y0=confidence_interval_low,
+                      x1=day, y1=confidence_interval_high,
+                      line=dict(color='red', dash='dash', width=4),
+                      name=f"Day {day} - Confidence Interval")
+
+        # Add sample mean marker
+        fig.add_trace(go.Scatter(x=[day], y=[row[parameter_name]],
+                                 mode='markers', marker=dict(symbol='diamond', size=16, color='black'),
+                                 name=f"Day {day} - Sample Mean"))
+
+    # Set x-axis label
+    fig.update_xaxes(title_text="Match Day", title_font=dict(size=24), tickfont=dict(size=18))
+
+    # Set y-axis label
+    fig.update_yaxes(title_text=f"{parameter_name} [meter]", title_font=dict(size=24), tickfont=dict(size=18))
+
+    # Set title
+    fig.update_layout(title_text=f"{parameter_name} in Practice for Each Match Day", title_font=dict(size=28))
+
+    # Show legend
+    fig.update_layout(showlegend=True, legend=dict(font=dict(size=18)))
+
+    # fig.write_html('test_123_123.html')
 
     # Show the plot
     fig.show(renderer='browser')
@@ -113,6 +169,7 @@ def visualize_stats_go(last_practice, historical_stats, next_day, desired_intens
     )
 
     fig.show(renderer='browser')
+
 
 #
 #
@@ -294,3 +351,104 @@ def visualize_stats_go(last_practice, historical_stats, next_day, desired_intens
 #     plt.ylabel('Total Distance')
 #     plt.show()
 #
+
+
+def plot_1d_histogram_per_day(data_df, specific_day=None):
+    """
+    Plot a 1D histogram for each day in the DataFrame.
+
+    :param data_df: DataFrame with columns 'Day' and 'Total Distance'
+    :param specific_day: Optional parameter to specify a specific day for plotting (e.g., 'MD+1')
+                         If None, all days will be plotted.
+    """
+    # Filter data for the specific day or keep all days
+    if specific_day:
+        filtered_data = data_df[data_df['Day'] == specific_day]
+    else:
+        filtered_data = data_df
+
+    # Get the unique days from the filtered DataFrame
+    unique_days = filtered_data['Day'].unique()
+
+    # Set the number of bins for the histogram
+    num_bins = 40
+
+    # Define subplot arrangement
+    num_days = len(unique_days)
+    if num_days <= 6:
+        rows = 2
+        cols = 3
+    else:
+        rows = 3
+        cols = 3
+
+    # Create subplots
+    fig = make_subplots(rows=rows, cols=cols, subplot_titles=[f"Day {day}" for day in unique_days])
+
+    # Plot histograms for each day
+    for i, day in enumerate(unique_days, start=1):
+        # Get the data for the current day
+        day_data = filtered_data[filtered_data['Day'] == day]
+
+        # Plot the histogram for 'Total Distance' values for the current day
+        row = (i - 1) // cols + 1
+        col = (i - 1) % cols + 1
+        fig.add_trace(go.Histogram(x=day_data['Total Distance'], nbinsx=num_bins, opacity=0.7,
+                                   name=f"Day {day}"), row=row, col=col)
+
+        # Set subplot titles
+        fig.update_xaxes(title_text="Total Distance", row=row, col=col)
+        fig.update_yaxes(title_text="Frequency", row=row, col=col)
+
+    # Set main title for the entire plot
+    if specific_day:
+        fig.update_layout(title_text=f"1D Histogram for Day {specific_day}")
+    else:
+        fig.update_layout(title_text="1D Histograms for All Days", height=1200)
+
+    # Show legend
+    fig.update_layout(showlegend=True)
+
+    # Write the figure to an HTML file
+    html_filename = "1d_histograms.html"
+    #pio.write_html(fig, file=html_filename)
+
+    # Show the plot in the browser
+    fig.show(renderer='browser')
+
+
+def visualize_data_and_estimation(data, mu_estimate, sigma_estimate):
+    """
+    Visualize the original data and the estimated normal distribution parameters.
+
+    :param data: The original data array for a specific day.
+    :param mu_estimate: The estimated mean (mu) of the normal distribution.
+    :param sigma_estimate: The estimated standard deviation (sigma) of the normal distribution.
+    """
+    # Create a histogram of the original data
+    plt.figure(figsize=(8, 6))
+    plt.hist(data, bins=20, density=True, alpha=0.7, color='skyblue', edgecolor='black', label='Original Data')
+
+    # Create an array of x values for the PDF of the estimated normal distribution
+    x = np.linspace(np.min(data), np.max(data), 100)
+
+    # Calculate the PDF of the estimated normal distribution using scipy.stats.norm
+    pdf_estimate = stats.norm.pdf(x, loc=mu_estimate, scale=sigma_estimate)
+
+    # Plot the estimated normal distribution PDF
+    plt.plot(x, pdf_estimate, 'r', label='Estimated Normal Distribution')
+
+    # Plot a vertical line at the estimated mean (mu)
+    plt.axvline(x=mu_estimate, color='orange', linestyle='--', linewidth=2,
+                label=f'Estimated Mean (mu): {mu_estimate:.2f}')
+
+    # Set plot labels and title
+    plt.xlabel('Total Distance')
+    plt.ylabel('Probability Density')
+    plt.title('Histogram and Estimated Normal Distribution')
+
+    # Show legend
+    plt.legend()
+
+    # Display the plot
+    plt.show()
